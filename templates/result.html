@@ -1,0 +1,401 @@
+{% extends "base.html" %}
+
+{% block title %}Detection Results{% endblock %}
+
+{% block content %}
+<style>
+    /* --- Hero layout --- */
+    .results-hero {
+        text-align: center;
+        padding: 2rem 0 3rem;
+        animation: fadeInUp 0.8s ease;
+    }
+
+    @keyframes fadeInUp {
+        from { transform: translateY(10px); opacity: 0; }
+        to   { transform: translateY(0);    opacity: 1; }
+    }
+
+    /* --- Unified pill row (two chips: prediction + confidence) --- */
+    .badge-row {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 1rem;              /* even spacing between pills */
+        flex-wrap: wrap;        /* wrap on small screens */
+        margin-bottom: 1.5rem;
+    }
+
+    /* Base chip style reused for both pills */
+    .model-tag {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1.5rem;
+        background: rgba(99, 102, 241, 0.2);
+        border: 1px solid rgba(99, 102, 241, 0.5);
+        border-radius: 2rem;
+        color: var(--primary);
+        font-weight: 700;
+        letter-spacing: 0.2px;
+
+        /* Equal size for both pills */
+        height: 48px;
+        min-width: 260px;
+        text-align: center;
+        white-space: nowrap;
+
+        /* Smooth hover/elevation */
+        transition: transform .2s ease, box-shadow .2s ease,
+                    background .2s ease, border-color .2s ease;
+    }
+
+    /* Hover state */
+    .model-tag:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 30px rgba(99,102,241,.25);
+        background: rgba(99, 102, 241, 0.3);
+        border-color: rgba(99, 102, 241, 0.8);
+    }
+
+    /* Keep other components as-is */
+    .card {
+        background: rgba(30, 41, 59, 0.4);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 2rem;
+        padding: 2.5rem;
+        margin-bottom: 2rem;
+        animation: fadeInUp 0.8s ease;
+    }
+
+    .card-title {
+        font-size: 1.8rem;
+        font-weight: 800;
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .highlighted-text {
+        background: rgba(15, 23, 42, 0.5);
+        padding: 2rem;
+        border-radius: 1rem;
+        line-height: 2;
+        font-size: 1.1rem;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .legend {
+        display: flex;
+        gap: 2rem;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+    }
+
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+    }
+
+    .legend-box {
+        width: 20px;
+        height: 20px;
+        border-radius: 0.25rem;
+    }
+
+    /* Probability bars */
+    .prob-container {
+        display: grid;
+        gap: 1.5rem;
+        margin-top: 2rem;
+    }
+
+    .prob-row {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .prob-label {
+        min-width: 150px;
+        font-weight: 700;
+        font-size: 1.1rem;
+    }
+
+    .prob-bar-wrapper {
+        flex: 1;
+        height: 50px;
+        background: rgba(15, 23, 42, 0.5);
+        border-radius: 2rem;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .prob-bar {
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 1.1rem;
+        color: white;
+        transition: width 1.5s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+    }
+
+    .prob-bar::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+        animation: shimmer 2s infinite;
+    }
+
+    @keyframes shimmer {
+        to { left: 100%; }
+    }
+
+    .prob-bar-human { background: linear-gradient(90deg, #06b6d4, #3b82f6); }
+    .prob-bar-ai    { background: linear-gradient(90deg, #ec4899, #f43f5e); }
+
+    .prob-value {
+        min-width: 80px;
+        text-align: right;
+        font-weight: 800;
+        font-size: 1.3rem;
+        background: linear-gradient(135deg, var(--primary), var(--accent));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    /* Feature list */
+    .feature-list { display: grid; gap: 1rem; }
+
+    .feature-item {
+        background: rgba(15, 23, 42, 0.5);
+        padding: 1.25rem 1.5rem;
+        border-radius: 1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-left: 4px solid var(--primary);
+        transition: all 0.3s;
+    }
+
+    .feature-item:hover {
+        background: rgba(15, 23, 42, 0.7);
+        transform: translateX(10px);
+    }
+
+    .feature-word {
+        font-weight: 800;
+        font-size: 1.2rem;
+        font-family: 'Courier New', monospace;
+    }
+
+    .feature-meta {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .feature-tag {
+        padding: 0.5rem 1rem;
+        border-radius: 2rem;
+        font-weight: 700;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+    }
+
+    .tag-ai    { background: linear-gradient(135deg, #ec4899, #f43f5e); color: white; }
+    .tag-human { background: linear-gradient(135deg, #06b6d4, #3b82f6); color: white; }
+
+    .feature-weight {
+        font-family: 'Courier New', monospace;
+        font-weight: 700;
+        color: var(--gray);
+        min-width: 80px;
+        text-align: right;
+    }
+
+    /* Light panel for LIME */
+    .lime-panel {
+        /* Fallback */
+        background: rgba(99, 102, 241, 0.08);
+        /* Theme-tinted surface */
+        background: color-mix(in srgb, white 88%, var(--primary) 12%);
+        border: 1px solid rgba(99, 102, 241, 0.25);
+        border-radius: 1rem;
+        padding: 1rem;
+    }
+
+    .lime-frame {
+        width: 100%;
+        min-height: 500px;
+        border: none;
+        border-radius: 0.75rem;
+        background: transparent;
+    }
+
+    /* Hide old big badge/gradient text if present */
+    .result-badge-large, .confidence-ring { display: none !important; }
+
+    .actions {
+        display: flex;
+        gap: 1.5rem;
+        margin-top: 3rem;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    /* Responsive tweaks */
+    @media (max-width: 768px) {
+        .model-tag { min-width: 220px; height: 44px; }
+        .prob-row { flex-direction: column; align-items: stretch; }
+        .prob-label, .prob-value { text-align: left; }
+    }
+</style>
+
+{% set is_ai = (result.prediction == 'AI-Generated') %}
+
+<div class="results-hero">
+    <!-- Only two pills: prediction + confidence -->
+    <div class="badge-row">
+        <div class="model-tag">{{ '🤖 AI-Generated' if is_ai else '✍️ Human' }}</div>
+        <div class="model-tag">📈 {{ "%.1f"|format(result.confidence) }}% Confidence</div>
+    </div>
+</div>
+
+<div class="card">
+    <h2 class="card-title">
+        <span>🎨</span>
+        <span>Word Analysis</span>
+    </h2>
+
+    <div class="legend">
+        <div class="legend-item">
+            <div class="legend-box" style="background: linear-gradient(135deg, #ec4899, #f43f5e);"></div>
+            <span>AI Indicators</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-box" style="background: linear-gradient(135deg, #06b6d4, #3b82f6);"></div>
+            <span>Human Indicators</span>
+        </div>
+    </div>
+
+    <div class="highlighted-text">
+        {{ result.highlighted_html|safe }}
+    </div>
+</div>
+
+<div class="card">
+    <h2 class="card-title">
+        <span>📊</span>
+        <span>Probability Distribution</span>
+    </h2>
+
+    <div class="prob-container">
+        <div class="prob-row">
+            <div class="prob-label">✍️ Human</div>
+            <div class="prob-bar-wrapper">
+                <div class="prob-bar prob-bar-human" style="width: {{ result.human_prob }}%">
+                    {% if result.human_prob > 10 %}{{ "%.1f"|format(result.human_prob) }}%{% endif %}
+                </div>
+            </div>
+            <div class="prob-value">{{ "%.1f"|format(result.human_prob) }}%</div>
+        </div>
+
+        <div class="prob-row">
+            <div class="prob-label">🤖 AI</div>
+            <div class="prob-bar-wrapper">
+                <div class="prob-bar prob-bar-ai" style="width: {{ result.ai_prob }}%">
+                    {% if result.ai_prob > 10 %}{{ "%.1f"|format(result.ai_prob) }}%{% endif %}
+                </div>
+            </div>
+            <div class="prob-value">{{ "%.1f"|format(result.ai_prob) }}%</div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2 class="card-title">
+        <span>🔍</span>
+        <span>Top Features (LIME)</span>
+    </h2>
+
+    <div class="feature-list">
+        {% for feature in result.features %}
+        <div class="feature-item">
+            <div class="feature-word">"{{ feature.word }}"</div>
+            <div class="feature-meta">
+                <div class="feature-tag tag-{{ feature.contribution|lower }}">
+                    {{ feature.contribution }}
+                </div>
+                <div class="feature-weight">{{ "%.4f"|format(feature.weight) }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+{% if result.lime_html %}
+<div class="card">
+    <h2 class="card-title">
+        <span>📈</span>
+        <span>Interactive LIME Visualization</span>
+    </h2>
+
+    <!-- Light background wrapper for better contrast -->
+    <div class="lime-panel">
+        <iframe id="lime-frame" class="lime-frame"></iframe>
+    </div>
+
+    <script>
+        (function () {
+            var html = {{ result.lime_html|tojson|safe }};
+            try {
+                // Ensure transparent bg + dark text inside the iframe
+                if (typeof html === 'string') {
+                    var inject = '<style>html,body{background:transparent!important;color:#111!important;}</style>';
+                    if (html.includes('</head>')) {
+                        html = html.replace('</head>', inject + '</head>');
+                    } else {
+                        html = inject + html;
+                    }
+                }
+                var frame = document.getElementById('lime-frame');
+                if ('srcdoc' in frame) {
+                    frame.srcdoc = html;
+                } else if (frame.contentWindow && frame.contentWindow.document) {
+                    frame.contentWindow.document.open();
+                    frame.contentWindow.document.write(html);
+                    frame.contentWindow.document.close();
+                }
+            } catch (e) {
+                var fallback = document.createElement('div');
+                fallback.innerHTML = html;
+                frame.replaceWith(fallback);
+            }
+        })();
+    </script>
+</div>
+{% endif %}
+
+<div class="actions">
+    <a href="{{ url_for('index') }}" class="btn btn-primary">
+        <span>🔄 Analyze Another</span>
+    </a>
+    <a href="{{ url_for('batch') }}" class="btn btn-secondary">
+        <span>📦 Batch Detection</span>
+    </a>
+</div>
+{% endblock %}
